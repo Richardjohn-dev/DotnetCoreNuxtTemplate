@@ -1,4 +1,5 @@
 using Backend.Infrastructure;
+using Backend.Infrastructure.Persistence;
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using Microsoft.AspNetCore.Http.Features;
@@ -11,15 +12,10 @@ RegisterServices(builder.Services, builder.Configuration);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    //app.MapOpenApi();
-    app.UseSwaggerGen();
+await EnsureDB(app, builder.Configuration);
 
-}
 
-app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
+
 
 
 app.UseCors("NuxtFrontend");
@@ -52,6 +48,23 @@ app.UseStatusCodePages();
 //   .UseSwaggerGen(); // Serves Swagger UI at /swagger
 
 
+app.UseAuthentication(); // Enable AuthN middleware BEFORE Authorization
+app.UseAuthorization();  // Enable AuthZ middleware
+
+// Add Antiforgery Middleware AFTER AuthN/AuthZ
+app.UseAntiforgery();
+
+
+app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
+
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    //app.MapOpenApi();
+    app.UseSwaggerGen();
+
+}
 
 
 app.Run();
@@ -62,13 +75,14 @@ static void RegisterServices(IServiceCollection services, IConfiguration configu
 {
     services.AddOpenApi();
 
+
     services.AddFastEndpoints();
     services.AddSwaggerDocument();
 
+
     services.ConfigureSPACors(configuration)
             .ConfigureDatabase(configuration)
-            .ConfigureIdentity(configuration)
-            .ConfigureAntiForgery(configuration);
+            .ConfigureAuthenticationAndAuthorization(configuration);
 
 
 
@@ -105,5 +119,17 @@ static void RegisterServices(IServiceCollection services, IConfiguration configu
     // builder.Services.AddAuthenticationJwtBearer(...);
     // builder.Services.AddAuthorization(...);
 
+
+}
+
+
+
+static async Task EnsureDB(WebApplication app, IConfiguration config)
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<ApplicationDbSeeder>();
+
+    await context.ManageDataAsync(config);
 
 }
