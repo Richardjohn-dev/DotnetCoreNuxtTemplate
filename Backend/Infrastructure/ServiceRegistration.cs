@@ -64,9 +64,9 @@ public static class ServicesRegistration
         services.AddAntiforgery(options =>
         {
             options.HeaderName = "X-CSRF-TOKEN"; // Match header name expected by frontend
-                                                 // HttpOnly = false is needed for the frontend to read the token from the cookie
+
             options.Cookie.Name = "CSRF-TOKEN";
-            options.Cookie.HttpOnly = false;
+            options.Cookie.HttpOnly = false;  // HttpOnly = false is needed for the frontend to read the token from the cookie
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Ensure Secure flag
             options.Cookie.SameSite = SameSiteMode.Strict; // Or Lax, depending on needs
         });

@@ -4,72 +4,82 @@ using FastEndpoints;
 using FastEndpoints.Swagger;
 using Microsoft.AspNetCore.Http.Features;
 
-var builder = WebApplication.CreateBuilder(args);
+// Configure Serilog Bootstrap Logger (if applicable, from Phase 5)
+// Log.Logger = new LoggerConfiguration()...CreateBootstrapLogger();
 
-RegisterServices(builder.Services, builder.Configuration);
-
-
-
-var app = builder.Build();
-
-await EnsureDB(app, builder.Configuration);
-
-
-
-
-
-app.UseCors("NuxtFrontend");
-
-app.UseHttpsRedirection();
-
-app.UseExceptionHandler();
-
-app.UseStatusCodePages();
-
-
-// app.UseCors(...);
-// app.UseAuthentication();
-// app.UseAuthorization();
-
-//app.UseFastEndpoints(c =>
-//{
-//    c.Endpoints.RoutePrefix = "api"; // Set API route prefix
-//                                     // Configure serialization, error handling etc. as needed
-//    c.Errors.ResponseBuilder = (failures, ctx, statusCode) =>
-//    {
-//        // Map validation failures to ProblemDetails
-//        return new Microsoft.AspNetCore.Mvc.ValidationProblemDetails(
-//            failures.GroupBy(f => f.PropertyName)
-//                    .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).ToArray())
-//            )
-//        { Status = statusCode };
-//    };
-//})
-//   .UseSwaggerGen(); // Serves Swagger UI at /swagger
-
-
-app.UseAuthentication(); // Enable AuthN middleware BEFORE Authorization
-app.UseAuthorization();  // Enable AuthZ middleware
-
-// Add Antiforgery Middleware AFTER AuthN/AuthZ
-app.UseAntiforgery();
-
-
-app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
-
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+try
 {
-    //app.MapOpenApi();
-    app.UseSwaggerGen();
+    // Log.Information("Starting web application"); // Serilog
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    RegisterServices(builder.Services, builder.Configuration);
+
+
+
+    var app = builder.Build();
+
+    await EnsureDB(app, builder.Configuration);
+
+
+
+
+
+    app.UseCors("NuxtFrontend");
+
+    app.UseHttpsRedirection();
+
+    app.UseExceptionHandler();
+
+    app.UseStatusCodePages();
+
+
+    // app.UseCors(...);
+    // app.UseAuthentication();
+    // app.UseAuthorization();
+
+    //app.UseFastEndpoints(c =>
+    //{
+    //    c.Endpoints.RoutePrefix = "api"; // Set API route prefix
+    //                                     // Configure serialization, error handling etc. as needed
+    //    c.Errors.ResponseBuilder = (failures, ctx, statusCode) =>
+    //    {
+    //        // Map validation failures to ProblemDetails
+    //        return new Microsoft.AspNetCore.Mvc.ValidationProblemDetails(
+    //            failures.GroupBy(f => f.PropertyName)
+    //                    .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).ToArray())
+    //            )
+    //        { Status = statusCode };
+    //    };
+    //})
+    //   .UseSwaggerGen(); // Serves Swagger UI at /swagger
+
+
+    app.UseAuthentication(); // Enable AuthN middleware BEFORE Authorization
+    app.UseAuthorization();  // Enable AuthZ middleware
+
+    // Add Antiforgery Middleware AFTER AuthN/AuthZ
+    app.UseAntiforgery();
+
+
+    app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
+
+
+    // Configure the HTTP request pipeline.
+    if (app.Environment.IsDevelopment())
+    {
+        //app.MapOpenApi();
+        app.UseSwaggerGen();
+
+    }
+
+
+    app.Run();
 
 }
-
-
-app.Run();
-
-
+catch (Exception ex) { /* Log fatal startup errors */ }
+finally
+{ /* Serilog CloseAndFlush() */ }
 
 static void RegisterServices(IServiceCollection services, IConfiguration configuration)
 {
@@ -84,6 +94,9 @@ static void RegisterServices(IServiceCollection services, IConfiguration configu
             .ConfigureDatabase(configuration)
             .ConfigureAuthenticationAndAuthorization(configuration);
 
+    // Add Health Checks (from Phase 5 setup)
+    //services.AddHealthChecks()
+    //    .(configuration.GetConnectionString("DefaultConnection")!, "database-check");
 
 
 
