@@ -1,8 +1,6 @@
 ﻿// Infrastructure/ApplicationBuilderExtensions.cs
-using Backend.Infrastructure.Persistence;
 using FastEndpoints;
 using FastEndpoints.Swagger;
-using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Infrastructure.Extensions;
 
@@ -27,25 +25,19 @@ public static class ApplicationBuilderExtensions
         // HTTPS redirection
         app.UseHttpsRedirection();
 
-        // Static files before auth if needed
-        // app.UseStaticFiles();
-
         // CORS before auth
         app.UseCors("NuxtFrontend");
+
+        // Endpoints
+        app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
+
 
         // Authentication and Authorization
         app.UseAuthentication();
         app.UseAuthorization();
 
-
-        //app.UseStatusCodePages();
-
         // Anti-forgery after auth
         app.UseAntiforgery();
-
-        // Endpoints
-        app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
-
 
         // Swagger UI
         app.UseSwaggerGen();
@@ -56,18 +48,4 @@ public static class ApplicationBuilderExtensions
         return app;
     }
 
-    public static WebApplication MigrateDatabase(this WebApplication app)
-    {
-        using (var scope = app.Services.CreateScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            dbContext.Database.Migrate();
-
-            // Call seed data if needed
-            // var seeder = scope.ServiceProvider.GetRequiredService<ApplicationDbSeeder>();
-            // seeder.SeedAsync().GetAwaiter().GetResult();
-        }
-
-        return app;
-    }
 }

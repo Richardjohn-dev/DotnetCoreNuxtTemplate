@@ -1,9 +1,12 @@
 using Backend.Infrastructure.Extensions;
 using Backend.Infrastructure.Persistence;
 
-// Configure Serilog Bootstrap Logger (if applicable, from Phase 5)
-// Log.Logger = new LoggerConfiguration()...CreateBootstrapLogger();
 
+//var logger = new LoggerConfiguration()
+
+//                .WriteTo.File("logs/errorlog-.txt",
+//                    restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning, rollingInterval: RollingInterval.Day)
+//                .CreateLogger();
 try
 {
     // Log.Information("Starting web application"); // Serilog
@@ -23,10 +26,16 @@ try
     app.Run();
 
 }
-catch (Exception ex) { /* Log fatal startup errors */ }
+catch (Exception ex)
+{
+    var sdfs = "";
+    //Log.Fatal(ex, "Host terminated unexpectedly");
+}
 finally
-{ /* Serilog CloseAndFlush() */ }
-
+{
+    //Log.Information("Closing service complete");
+    //Log.CloseAndFlush();
+}
 
 static async Task MigrateDatabase(WebApplication app, IConfiguration config)
 {
@@ -49,3 +58,4 @@ static async Task MigrateDatabase(WebApplication app, IConfiguration config)
         throw; // Rethrow if you want to prevent application startup on migration failure
     }
 }
+

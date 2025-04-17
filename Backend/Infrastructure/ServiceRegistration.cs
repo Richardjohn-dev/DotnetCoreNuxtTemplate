@@ -24,8 +24,8 @@ public static class ServicesRegistrationExtensions
         // Identity (must come before Authentication)
         builder.Services.ConfigureIdentity();
 
-        // Authentication (JWT & Google)
-        builder.Services.ConfigureAuthentication(builder.Configuration);
+        // Authentication (JWT & Google) & Application Cookie Config
+        builder.Services.ConfigureAuthenticationAndCookies(builder.Configuration, builder.Environment);
 
         // Antiforgery
         builder.Services.ConfigureAntiforgery();
@@ -63,6 +63,8 @@ public static class ServicesRegistrationExtensions
     public static IServiceCollection ConfigureDatabase(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrEmpty(connectionString))
+            throw new InvalidOperationException("Database connection string 'DefaultConnection' not configured.");
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString)); // Get from config
@@ -86,7 +88,8 @@ public static class ServicesRegistrationExtensions
             options.Password.RequireLowercase = true;
             options.Password.RequireUppercase = true;
             options.Password.RequireNonAlphanumeric = false;
-            options.SignIn.RequireConfirmedAccount = true;
+
+            options.SignIn.RequireConfirmedAccount = true;// adjust as needed
 
             options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             options.Lockout.MaxFailedAccessAttempts = 5;
@@ -96,58 +99,149 @@ public static class ServicesRegistrationExtensions
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddDefaultTokenProviders(); // For password reset, email confirmation tokens
 
+
         return services;
 
+
     }
-    public static IServiceCollection ConfigureAuthentication(this IServiceCollection services, IConfiguration configuration)
+    //public static IServiceCollection ConfigureAuthentication(this IServiceCollection services, IConfiguration configuration)
+    //{
+
+
+    //    // Configure Authentication (JWT and Google)
+    //    var jwtSettings = configuration.GetSection("JWT");
+    //    var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]
+    //        ?? throw new InvalidOperationException("JWT SecretKey not configured"));
+
+    //    services.AddAuthentication(options =>
+    //    {
+    //        options.DefaultScheme = IdentityConstants.ApplicationScheme; // Use Identity's cookie scheme
+    //        options.DefaultSignInScheme = IdentityConstants.ExternalScheme; // Default for external logins
+    //    })
+    //    .AddJwtBearer(options => // Configure JWT Bearer for API access validation
+    //    {
+    //        //options.RequireHttpsMetadata = builder.Environment.IsProduction();
+    //        options.SaveToken = false; // Don't need to save token when using cookies
+    //        options.TokenValidationParameters = new TokenValidationParameters
+    //        {
+    //            ValidateIssuerSigningKey = true,
+    //            IssuerSigningKey = new SymmetricSecurityKey(key),
+    //            ValidateIssuer = true,
+    //            ValidIssuer = jwtSettings["Issuer"],
+    //            ValidateAudience = true,
+    //            ValidAudience = jwtSettings["Audience"],
+    //            ValidateLifetime = true,
+    //            ClockSkew = TimeSpan.Zero
+    //        };
+    //        options.Events = new JwtBearerEvents // Read token from HttpOnly cookie
+    //        {
+    //            OnMessageReceived = context =>
+    //            {
+    //                context.Token = context.Request.Cookies["access_token"];
+    //                return Task.CompletedTask;
+    //            }
+    //        };
+    //    })
+    //    .AddGoogle(options => // Add Google Authentication Handler
+    //    {
+    //        var googleAuthNSection = configuration.GetSection("Authentication:Google");
+    //        options.ClientId = googleAuthNSection["ClientId"] ?? throw new InvalidOperationException("Google ClientId not configured");
+    //        options.ClientSecret = googleAuthNSection["ClientSecret"] ?? throw new InvalidOperationException("Google ClientSecret not configured");
+    //        options.CallbackPath = "/api/auth/google-callback";
+    //        options.SaveTokens = true; // Optional: Save external tokens
+    //        options.Scope.Add("profile");
+    //        options.Scope.Add("email");
+    //    });
+    //    //.AddCookie(IdentityConstants.ExternalScheme); // Needed for external login flow state
+
+    //    return services;
+    //}
+
+    public static IServiceCollection ConfigureAuthenticationAndCookies(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
     {
-
-
-        // Configure Authentication (JWT and Google)
         var jwtSettings = configuration.GetSection("JWT");
         var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]
             ?? throw new InvalidOperationException("JWT SecretKey not configured"));
 
         services.AddAuthentication(options =>
         {
-            options.DefaultScheme = IdentityConstants.ApplicationScheme; // Use Identity's cookie scheme
-            options.DefaultSignInScheme = IdentityConstants.ExternalScheme; // Default for external logins
+            // Set Default schemes for API authorization
+            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            // Set Default scheme for external logins (used by Identity)
+            options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
         })
-             .AddJwtBearer(options => // Configure JWT Bearer for API access validation
-             {
-                 //options.RequireHttpsMetadata = builder.Environment.IsProduction();
-                 options.SaveToken = false; // Don't need to save token when using cookies
-                 options.TokenValidationParameters = new TokenValidationParameters
-                 {
-                     ValidateIssuerSigningKey = true,
-                     IssuerSigningKey = new SymmetricSecurityKey(key),
-                     ValidateIssuer = true,
-                     ValidIssuer = jwtSettings["Issuer"],
-                     ValidateAudience = true,
-                     ValidAudience = jwtSettings["Audience"],
-                     ValidateLifetime = true,
-                     ClockSkew = TimeSpan.Zero
-                 };
-                 options.Events = new JwtBearerEvents // Read token from HttpOnly cookie
-                 {
-                     OnMessageReceived = context =>
-                     {
-                         context.Token = context.Request.Cookies["access_token"];
-                         return Task.CompletedTask;
-                     }
-                 };
-             })
-             .AddGoogle(options => // Add Google Authentication Handler
-             {
-                 var googleAuthNSection = configuration.GetSection("Authentication:Google");
-                 options.ClientId = googleAuthNSection["ClientId"] ?? throw new InvalidOperationException("Google ClientId not configured");
-                 options.ClientSecret = googleAuthNSection["ClientSecret"] ?? throw new InvalidOperationException("Google ClientSecret not configured");
-                 options.CallbackPath = "/api/auth/google-callback";
-                 options.SaveTokens = true; // Optional: Save external tokens
-                 options.Scope.Add("profile");
-                 options.Scope.Add("email");
-             })
-             .AddCookie(IdentityConstants.ExternalScheme); // Needed for external login flow state
+        .AddJwtBearer(options => // Configure JWT Bearer for API access validation
+        {
+            options.RequireHttpsMetadata = environment.IsProduction(); // Use environment check
+            options.SaveToken = false;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = true,
+                ValidIssuer = jwtSettings["Issuer"],
+                ValidateAudience = true,
+                ValidAudience = jwtSettings["Audience"],
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            };
+            options.Events = new JwtBearerEvents // Read token from HttpOnly cookie
+            {
+                OnMessageReceived = context =>
+                {
+                    context.Token = context.Request.Cookies["access_token"];
+                    return Task.CompletedTask;
+                }
+                // Add OnChallenge / OnAuthenticationFailed handlers here if needed
+                //OnAuthenticationFailed = context => {
+                //    // Optional: Add logging for failed JWT validation
+                //    Console.WriteLine("JWT Auth Failed: " + context.Exception.Message);
+                //    return Task.CompletedTask;
+                //},
+                //OnChallenge = context => {
+                //    // Optional: Customize challenge response if needed (e.g., avoid redirect for APIs)
+                //    // context.HandleResponse(); // Prevent default redirect behavior if Identity Challenges
+                //    // context.Response.StatusCode = 401;
+                //    // return Task.CompletedTask;
+                //    return Task.CompletedTask; // Let default behavior proceed for now
+                //}
+            };
+        })
+        .AddGoogle(options => // Add Google Authentication Handler
+        {
+            var googleAuthNSection = configuration.GetSection("Authentication:Google");
+            options.ClientId = googleAuthNSection["ClientId"] ?? throw new InvalidOperationException("Google ClientId not configured");
+            options.ClientSecret = googleAuthNSection["ClientSecret"] ?? throw new InvalidOperationException("Google ClientSecret not configured");
+            options.CallbackPath = "/api/auth/google-callback"; // Ensure this matches endpoint route & Google Console
+            options.SaveTokens = true;
+            options.Scope.Add("profile");
+            options.Scope.Add("email");
+        });
+
+        // --- Configure Identity's Application Cookie ---
+        // Even though JWT is primary for API, Identity uses this cookie internally.
+        // Configuring it helps prevent conflicts and unwanted redirects.
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Enforce HTTPS
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.ExpireTimeSpan = TimeSpan.FromDays(14); // Identity session cookie expiry
+            options.SlidingExpiration = true;
+
+            // Prevent Identity's default redirects for API calls (return status codes instead)
+            options.Events.OnRedirectToLogin = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
+        });
 
         return services;
     }
@@ -194,22 +288,23 @@ public static class ServicesRegistrationExtensions
 
     //    return services;
     //}
+    //public static IServiceCollection ConfigureHealthChecks(this IServiceCollection services, IConfiguration configuration)
+    //{
+    //    services.AddHealthChecks()
+    //        .AddSqlServer(
+    //            configuration.GetConnectionString("DefaultConnection")!,
+    //            name: "database-check",
+    //            tags: new[] { "db", "sql" });
+    //    return services;
+    //}
 
     public static IServiceCollection ConfigureFastEndpoints(this IServiceCollection services)
     {
-        services.AddFastEndpoints().AddSwaggerDocument(options =>
-        {
-            options.Title = "My Api";
-            options.Version = "v1";
-            options.Description = "Template starter";
-        });
-        //services.AddSwaggerDocument();
-        //.SwaggerDocument(options =>
-        //{
-        //    options.Title = "My API";
-        //    options.Version = "v1";
-        //});
         services.AddOpenApi();
+
+        services.AddFastEndpoints();
+        services.AddSwaggerDocument();
+
 
         return services;
     }
