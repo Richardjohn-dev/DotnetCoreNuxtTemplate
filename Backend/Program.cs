@@ -1,8 +1,5 @@
-using Backend.Infrastructure;
+using Backend.Infrastructure.Extensions;
 using Backend.Infrastructure.Persistence;
-using FastEndpoints;
-using FastEndpoints.Swagger;
-using Microsoft.AspNetCore.Http.Features;
 
 // Configure Serilog Bootstrap Logger (if applicable, from Phase 5)
 // Log.Logger = new LoggerConfiguration()...CreateBootstrapLogger();
@@ -13,65 +10,14 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    RegisterServices(builder.Services, builder.Configuration);
-
-
+    builder.RegisterServices();
 
     var app = builder.Build();
 
-    await EnsureDB(app, builder.Configuration);
+    await MigrateDatabase(app, builder.Configuration);
 
-
-
-
-
-    app.UseCors("NuxtFrontend");
-
-    app.UseHttpsRedirection();
-
-    app.UseExceptionHandler();
-
-    app.UseStatusCodePages();
-
-
-    // app.UseCors(...);
-    // app.UseAuthentication();
-    // app.UseAuthorization();
-
-    //app.UseFastEndpoints(c =>
-    //{
-    //    c.Endpoints.RoutePrefix = "api"; // Set API route prefix
-    //                                     // Configure serialization, error handling etc. as needed
-    //    c.Errors.ResponseBuilder = (failures, ctx, statusCode) =>
-    //    {
-    //        // Map validation failures to ProblemDetails
-    //        return new Microsoft.AspNetCore.Mvc.ValidationProblemDetails(
-    //            failures.GroupBy(f => f.PropertyName)
-    //                    .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).ToArray())
-    //            )
-    //        { Status = statusCode };
-    //    };
-    //})
-    //   .UseSwaggerGen(); // Serves Swagger UI at /swagger
-
-
-    app.UseAuthentication(); // Enable AuthN middleware BEFORE Authorization
-    app.UseAuthorization();  // Enable AuthZ middleware
-
-    // Add Antiforgery Middleware AFTER AuthN/AuthZ
-    app.UseAntiforgery();
-
-
-    app.UseFastEndpoints(x => x.Errors.UseProblemDetails());
-
-
-    // Configure the HTTP request pipeline.
-    if (app.Environment.IsDevelopment())
-    {
-        //app.MapOpenApi();
-        app.UseSwaggerGen();
-
-    }
+    // Configure middleware pipeline
+    app.ConfigureMiddlewarePipeline();
 
 
     app.Run();
@@ -81,68 +27,25 @@ catch (Exception ex) { /* Log fatal startup errors */ }
 finally
 { /* Serilog CloseAndFlush() */ }
 
-static void RegisterServices(IServiceCollection services, IConfiguration configuration)
+
+static async Task MigrateDatabase(WebApplication app, IConfiguration config)
 {
-    services.AddOpenApi();
-
-
-    services.AddFastEndpoints();
-    services.AddSwaggerDocument();
-
-
-    services.ConfigureSPACors(configuration)
-            .ConfigureDatabase(configuration)
-            .ConfigureAuthenticationAndAuthorization(configuration);
-
-    // Add Health Checks (from Phase 5 setup)
-    //services.AddHealthChecks()
-    //    .(configuration.GetConnectionString("DefaultConnection")!, "database-check");
-
-
-
-    services.AddExceptionHandler<GlobalExceptionHandler>();
-
-    services.AddProblemDetails(options => options.CustomizeProblemDetails = problemContext =>
+    try
     {
-        problemContext.ProblemDetails.Instance = $"{problemContext.HttpContext.Request.Method} {problemContext.HttpContext.Request.Path}";
-        problemContext.ProblemDetails.Extensions.TryAdd("requestId", problemContext.HttpContext.TraceIdentifier);
-        var activity = problemContext.HttpContext.Features.Get<IHttpActivityFeature>()?.Activity;
-        problemContext.ProblemDetails.Extensions.TryAdd("traceId", activity?.Id);
-    });
+        using var scope = app.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        var seeder = services.GetRequiredService<ApplicationDbSeeder>();
+        await seeder.ManageDataAsync(config);
 
-
-
-
-
-    // Add services to the container.
-    // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-
-    //builder.Services.AddFastEndpoints()
-    //                .SwaggerDocument(o => // Configure Swagger/OpenAPI
-    //                {
-    //                    o.DocumentSettings = s =>
-    //                    {
-    //                        s.Title = "MyTemplate API";
-    //                        s.Version = "v1";
-    //                    };
-    //                });
-
-    // builder.Services.AddDbContext<ApplicationDbContext>(...);
-    // builder.Services.AddIdentity<ApplicationUser, IdentityRole>(...)
-    // builder.Services.AddAuthenticationJwtBearer(...);
-    // builder.Services.AddAuthorization(...);
-
-
-}
-
-
-
-static async Task EnsureDB(WebApplication app, IConfiguration config)
-{
-    using var scope = app.Services.CreateScope();
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<ApplicationDbSeeder>();
-
-    await context.ManageDataAsync(config);
-
+        // Optional logging
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("Database migration completed successfully");
+    }
+    catch (Exception ex)
+    {
+        // Log the error and optionally rethrow depending on your error handling strategy
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database");
+        throw; // Rethrow if you want to prevent application startup on migration failure
+    }
 }

@@ -1,31 +1,64 @@
 ﻿using Backend.Infrastructure.Identity.Constants;
 using Backend.Infrastructure.Persistence;
 using Backend.Infrastructure.Persistence.Entity;
+using FastEndpoints;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
-namespace Backend.Infrastructure;
-public static class ServicesRegistration
-{
-    public static IServiceCollection ConfigureSPACors(this IServiceCollection services, IConfiguration configuration)
-    {
-        //var allowedOrigins = configuration.GetSection("AppSettings:CORS-Settings:Allow-Origins").Get<string[]>();
+namespace Backend.Infrastructure.Extensions;
 
-        services.AddCors(options =>
+
+public static class ServicesRegistrationExtensions
+{
+    public static WebApplicationBuilder RegisterServices(this WebApplicationBuilder builder)
+    {
+        builder.Services.ConfigureErrorHandling();
+
+        // Database
+        builder.Services.ConfigureDatabase(builder.Configuration);
+
+        // Identity (must come before Authentication)
+        builder.Services.ConfigureIdentity();
+
+        // Authentication (JWT & Google)
+        builder.Services.ConfigureAuthentication(builder.Configuration);
+
+        // Antiforgery
+        builder.Services.ConfigureAntiforgery();
+
+        // Authorization policies
+        builder.Services.ConfigureAuthorization();
+
+        // CORS policies
+        builder.Services.ConfigureSPACors(builder.Configuration);
+
+        // FastEndpoints and Swagger
+        builder.Services.ConfigureFastEndpoints();
+
+        // Health checks
+        //services.ConfigureHealthChecks(configuration);
+
+        return builder;
+    }
+
+    public static IServiceCollection ConfigureErrorHandling(this IServiceCollection services)
+    {
+        services.AddExceptionHandler<GlobalExceptionHandler>();
+        services.AddProblemDetails(options => options.CustomizeProblemDetails = problemContext =>
         {
-            options.AddPolicy("NuxtFrontend",
-               builder =>
-               builder.WithOrigins(["http://localhost:3000", "http://localhost:3001"])
-                    .AllowAnyMethod()
-                    .AllowAnyHeader()
-                    .AllowCredentials());
+            problemContext.ProblemDetails.Instance = $"{problemContext.HttpContext.Request.Method} {problemContext.HttpContext.Request.Path}";
+            problemContext.ProblemDetails.Extensions.TryAdd("requestId", problemContext.HttpContext.TraceIdentifier);
+            var activity = problemContext.HttpContext.Features.Get<IHttpActivityFeature>()?.Activity;
+            problemContext.ProblemDetails.Extensions.TryAdd("traceId", activity?.Id);
         });
 
         return services;
     }
+
 
     public static IServiceCollection ConfigureDatabase(this IServiceCollection services, IConfiguration configuration)
     {
@@ -42,7 +75,7 @@ public static class ServicesRegistration
 
     }
 
-    public static IServiceCollection ConfigureAuthenticationAndAuthorization(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection ConfigureIdentity(this IServiceCollection services)
     {
         // Configure Identity
         services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -53,35 +86,33 @@ public static class ServicesRegistration
             options.Password.RequireLowercase = true;
             options.Password.RequireUppercase = true;
             options.Password.RequireNonAlphanumeric = false;
-            options.SignIn.RequireConfirmedAccount = false; // Set to true if email confirmation is needed
+            options.SignIn.RequireConfirmedAccount = true;
+
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+            options.Lockout.MaxFailedAccessAttempts = 5;
+
             options.User.RequireUniqueEmail = true;
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddDefaultTokenProviders(); // For password reset, email confirmation tokens
 
+        return services;
 
-        // Configure Antiforgery (for CSRF protection with cookies)
-        services.AddAntiforgery(options =>
-        {
-            options.HeaderName = "X-CSRF-TOKEN"; // Match header name expected by frontend
-
-            options.Cookie.Name = "CSRF-TOKEN";
-            options.Cookie.HttpOnly = false;  // HttpOnly = false is needed for the frontend to read the token from the cookie
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Ensure Secure flag
-            options.Cookie.SameSite = SameSiteMode.Strict; // Or Lax, depending on needs
-        });
-
+    }
+    public static IServiceCollection ConfigureAuthentication(this IServiceCollection services, IConfiguration configuration)
+    {
 
 
         // Configure Authentication (JWT and Google)
         var jwtSettings = configuration.GetSection("JWT");
-        var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured"));
+        var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]
+            ?? throw new InvalidOperationException("JWT SecretKey not configured"));
 
         services.AddAuthentication(options =>
-         {
-             options.DefaultScheme = IdentityConstants.ApplicationScheme; // Use Identity's cookie scheme
-             options.DefaultSignInScheme = IdentityConstants.ExternalScheme; // Default for external logins
-         })
+        {
+            options.DefaultScheme = IdentityConstants.ApplicationScheme; // Use Identity's cookie scheme
+            options.DefaultSignInScheme = IdentityConstants.ExternalScheme; // Default for external logins
+        })
              .AddJwtBearer(options => // Configure JWT Bearer for API access validation
              {
                  //options.RequireHttpsMetadata = builder.Environment.IsProduction();
@@ -118,27 +149,88 @@ public static class ServicesRegistration
              })
              .AddCookie(IdentityConstants.ExternalScheme); // Needed for external login flow state
 
+        return services;
+    }
 
+    public static IServiceCollection ConfigureAuthorization(this IServiceCollection services)
+    {
         services.AddAuthorization(options =>
         {
             options.AddPolicy(ApplicationPolicy.AdminAccess, policy => policy.RequireRole(ApplicationRole.Admin)); // Defined in SeedData later
             options.AddPolicy(ApplicationPolicy.UserAccess, policy => policy.RequireRole(ApplicationRole.User, ApplicationRole.Admin)); // Defined in SeedData later
         });
 
-        //services.AddAuthorization(options =>
-        //{
-        //    options.AddPolicy(ApplicationPolicy.UserAccess, policy =>
-        //           policy.RequireAssertion(context =>
-        //                       context.User.IsInRole(ApplicationRole.Admin)
-        //                       || context.User.IsInRole(ApplicationRole.User)));
+        return services;
+    }
 
-        //    //options.FallbackPolicy = options.DefaultPolicy;
-        //    //Todo : why does this make CORS issue? probably https
+
+
+
+
+
+
+    public static IServiceCollection ConfigureAntiforgery(this IServiceCollection services)
+    {
+        // Configure Antiforgery (for CSRF protection with cookies)
+        services.AddAntiforgery(options =>
+        {
+            options.HeaderName = "X-CSRF-TOKEN"; // Match header name expected by frontend
+
+            options.Cookie.Name = "CSRF-TOKEN";
+            options.Cookie.HttpOnly = false;  // HttpOnly = false is needed for the frontend to read the token from the cookie
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Ensure Secure flag
+            options.Cookie.SameSite = SameSiteMode.Strict; // Or Lax, depending on needs
+        });
+        return services;
+    }
+
+
+    //public static IServiceCollection ConfigureHealthChecks(this IServiceCollection services, IConfiguration configuration)
+    //{
+    //    services.AddHealthChecks()
+    //        .AddSqlServer(
+    //            configuration.GetConnectionString("DefaultConnection")!,
+    //            name: "database-check");
+
+    //    return services;
+    //}
+
+    public static IServiceCollection ConfigureFastEndpoints(this IServiceCollection services)
+    {
+        services.AddFastEndpoints().AddSwaggerDocument(options =>
+        {
+            options.Title = "My Api";
+            options.Version = "v1";
+            options.Description = "Template starter";
+        });
+        //services.AddSwaggerDocument();
+        //.SwaggerDocument(options =>
+        //{
+        //    options.Title = "My API";
+        //    options.Version = "v1";
         //});
+        services.AddOpenApi();
 
         return services;
-
     }
+
+    public static IServiceCollection ConfigureSPACors(this IServiceCollection services, IConfiguration configuration)
+    {
+        //var allowedOrigins = configuration.GetSection("AppSettings:CORS-Settings:Allow-Origins").Get<string[]>();
+
+        services.AddCors(options =>
+        {
+            options.AddPolicy("NuxtFrontend",
+               builder =>
+               builder.WithOrigins(["http://localhost:3000", "http://localhost:3001"])
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .AllowCredentials());
+        });
+
+        return services;
+    }
+
 
 
 };
