@@ -26,7 +26,7 @@ public static class ApplicationBuilderExtensions
         app.UseHttpsRedirection();
 
         // CORS before auth
-        app.UseCors("NuxtFrontend");
+        app.UseCors("AllowNuxtFrontend");
 
         // Endpoints
         app.UseFastEndpoints(x => x.Errors.UseProblemDetails());

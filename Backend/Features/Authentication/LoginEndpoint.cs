@@ -16,9 +16,17 @@ public class LoginEndpoint : Endpoint<LoginRequest, ApiResponse<UserInfoResponse
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _config;
     private readonly IAntiforgery _antiforgery;
-    public LoginEndpoint(SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager, IConfiguration config, IAntiforgery antiforgery, ApplicationDbContext context)
+    public LoginEndpoint(
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        IConfiguration config,
+        IAntiforgery antiforgery,
+        ApplicationDbContext context)
     {
-        _signInManager = signInManager; _userManager = userManager; _config = config; _antiforgery = antiforgery;
+        _signInManager = signInManager;
+        _userManager = userManager;
+        _config = config;
+        _antiforgery = antiforgery;
         _context = context;
     }
 

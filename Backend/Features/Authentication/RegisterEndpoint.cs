@@ -27,7 +27,9 @@ public class RegisterEndpoint : Endpoint<RegisterRequest, ApiResponse<UserInfoRe
         var result = await _userManager.CreateAsync(newUser, req.Password);
         if (!result.Succeeded)
         {
-            foreach (var error in result.Errors) AddError(error.Description, error.Code);
+            foreach (var error in result.Errors)
+                AddError(error.Description, error.Code);
+
             await SendErrorsAsync(400, ct); return;
         }
         await _userManager.AddToRoleAsync(newUser, ApplicationRole.User);

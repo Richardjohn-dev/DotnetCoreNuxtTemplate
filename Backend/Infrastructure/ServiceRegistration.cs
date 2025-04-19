@@ -309,18 +309,43 @@ public static class ServicesRegistrationExtensions
         return services;
     }
 
+    //public static IServiceCollection ConfigureFastEndpoints(this IServiceCollection services)
+    //{
+    //    // Register FastEndpoints
+    //    services.AddFastEndpoints();
+
+    //    // Configure Swagger/OpenAPI document generation via FastEndpoints extensions
+    //    services.SwaggerDocument(o =>
+    //    {
+    //        o.DocumentSettings = s =>
+    //        {
+    //            s.Title = "MyTemplate API";
+    //            s.Version = "v1";
+    //            // Add more OpenAPI document configurations here
+    //        };
+    //        // Configure JWT Bearer security scheme for Swagger UI
+    //        o.EnableJWTBearerAuth = true;
+    //    });
+
+    //    return services;
+    //}
+
+
     public static IServiceCollection ConfigureSPACors(this IServiceCollection services, IConfiguration configuration)
     {
         //var allowedOrigins = configuration.GetSection("AppSettings:CORS-Settings:Allow-Origins").Get<string[]>();
 
         services.AddCors(options =>
         {
-            options.AddPolicy("NuxtFrontend",
-               builder =>
-               builder.WithOrigins(["http://localhost:3000", "http://localhost:3001"])
+            options.AddPolicy("AllowNuxtFrontend",
+               policyBuilder =>
+               {
+                   policyBuilder.WithOrigins(["http://localhost:3000", "http://localhost:3001"])
                     .AllowAnyMethod()
                     .AllowAnyHeader()
-                    .AllowCredentials());
+                    .AllowCredentials();
+               });
+
         });
 
         return services;
